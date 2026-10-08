@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "originsort"
+version = "0.1.0"
+description = "동국대학교 eClass 다운로드 출처를 이용한 Windows 파일 자동 분류기"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "OriginSort contributors" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+originsort = "originsort.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/originsort"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
