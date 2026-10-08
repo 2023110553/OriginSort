@@ -30,6 +30,7 @@ class DownloadMonitor:
         self.on_result = on_result
         self.pending: dict[Path, PendingFile] = {}
         self.processed: dict[Path, tuple[int, int]] = {}
+        self._last_directory_mtime: int | None = None
 
     @staticmethod
     def _signature(path: Path) -> tuple[int, int]:
@@ -47,9 +48,20 @@ class DownloadMonitor:
                     self.processed[path] = self._signature(path)
                 except OSError:
                     continue
+        try:
+            self._last_directory_mtime = self.folder.stat().st_mtime_ns
+        except OSError:
+            self._last_directory_mtime = None
 
     def scan_once(self) -> list[MoveResult]:
         results: list[MoveResult] = []
+        try:
+            directory_mtime = self.folder.stat().st_mtime_ns
+        except OSError:
+            return results
+        if not self.pending and directory_mtime == self._last_directory_mtime:
+            return results
+        self._last_directory_mtime = directory_mtime
         current_paths: set[Path] = set()
         for path in self.folder.iterdir():
             if not self._eligible(path):
