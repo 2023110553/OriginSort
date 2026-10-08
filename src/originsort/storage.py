@@ -18,6 +18,18 @@ class Rule:
     enabled: bool
 
 
+@dataclass(frozen=True, slots=True)
+class MoveRecord:
+    id: int
+    source_path: Path
+    destination_path: Path
+    source_key: str
+    sha256: str
+    size: int
+    moved_at: str
+    undone_at: str | None
+
+
 def default_database_path() -> Path:
     base = os.environ.get("LOCALAPPDATA")
     if base:
@@ -55,6 +67,17 @@ class Storage:
                     enabled INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS moves (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_path TEXT NOT NULL,
+                    destination_path TEXT NOT NULL,
+                    source_key TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    size INTEGER NOT NULL,
+                    moved_at TEXT NOT NULL,
+                    undone_at TEXT
                 );
                 """
             )
@@ -107,9 +130,63 @@ class Storage:
             ).fetchall()
         return [self._to_rule(row) for row in rows]
 
+    def record_move(self, source_path: Path, destination_path: Path,
+                    source_key: str, sha256: str, size: int) -> int:
+        moved_at = datetime.now(UTC).isoformat()
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """INSERT INTO moves (
+                       source_path, destination_path, source_key, sha256,
+                       size, moved_at
+                   ) VALUES (?, ?, ?, ?, ?, ?)""",
+                (str(source_path), str(destination_path), source_key,
+                 sha256, size, moved_at),
+            )
+            return int(cursor.lastrowid)
+
+    def get_move(self, move_id: int) -> MoveRecord | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """SELECT id, source_path, destination_path, source_key,
+                          sha256, size, moved_at, undone_at
+                   FROM moves WHERE id = ?""",
+                (move_id,),
+            ).fetchone()
+        return self._to_move(row) if row else None
+
+    def list_moves(self, limit: int = 20) -> list[MoveRecord]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """SELECT id, source_path, destination_path, source_key,
+                          sha256, size, moved_at, undone_at
+                   FROM moves ORDER BY id DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [self._to_move(row) for row in rows]
+
+    def mark_move_undone(self, move_id: int) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE moves SET undone_at = ? WHERE id = ?",
+                (datetime.now(UTC).isoformat(), move_id),
+            )
+
     @staticmethod
     def _to_rule(row: sqlite3.Row) -> Rule:
         return Rule(row["source_key"], Path(row["destination"]),
                     row["evidence_count"], row["creation_method"],
                     bool(row["enabled"]))
+
+    @staticmethod
+    def _to_move(row: sqlite3.Row) -> MoveRecord:
+        return MoveRecord(
+            id=row["id"],
+            source_path=Path(row["source_path"]),
+            destination_path=Path(row["destination_path"]),
+            source_key=row["source_key"],
+            sha256=row["sha256"],
+            size=row["size"],
+            moved_at=row["moved_at"],
+            undone_at=row["undone_at"],
+        )
 

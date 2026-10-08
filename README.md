@@ -46,3 +46,17 @@ py -m originsort.cli classify "C:\Users\사용자\Downloads\lecture.pdf"
 
 전체 개발 순서는 [개발 계획](docs/ROADMAP.md)에서 관리합니다.
 
+## 이동과 되돌리기
+
+`move`와 `undo`는 기본적으로 미리보기만 합니다. 실제 변경에는 `--execute`가 필요합니다.
+
+```powershell
+py -m originsort.cli move "C:\Users\사용자\Downloads\lecture.pdf"
+py -m originsort.cli move "C:\Users\사용자\Downloads\lecture.pdf" --execute
+py -m originsort.cli history
+py -m originsort.cli undo 1
+py -m originsort.cli undo 1 --execute
+```
+
+이동 기록에는 원래 경로와 SHA-256 해시가 저장됩니다. 이동된 파일이 수정됐거나 원래 위치에 같은 이름의 파일이 생기면 되돌리기를 실행하지 않습니다.
+

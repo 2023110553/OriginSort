@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from .classifier import classify_file
+from .mover import move_classified_file, undo_move
 from .scanner import RuleCandidate, scan_folder
 from .storage import Storage
 
@@ -29,6 +30,19 @@ def build_parser() -> argparse.ArgumentParser:
     classify = commands.add_parser("classify",
                                    help="파일을 이동하지 않고 예상 목적지를 표시합니다")
     classify.add_argument("file", type=Path)
+
+    move = commands.add_parser("move", help="분류된 파일의 이동을 미리보거나 실행합니다")
+    move.add_argument("file", type=Path)
+    move.add_argument("--execute", action="store_true",
+                      help="미리보기 대신 실제로 이동합니다")
+
+    history = commands.add_parser("history", help="최근 이동 기록을 표시합니다")
+    history.add_argument("--limit", type=int, default=20)
+
+    undo = commands.add_parser("undo", help="기록된 이동을 되돌립니다")
+    undo.add_argument("move_id", type=int)
+    undo.add_argument("--execute", action="store_true",
+                      help="미리보기 대신 실제로 되돌립니다")
     return parser
 
 
@@ -106,6 +120,28 @@ def run_classify(path: Path, storage: Storage) -> int:
     return 3
 
 
+def _print_move_result(result) -> int:
+    print(f"결과: {result.reason}")
+    print(f"원본: {result.source}")
+    if result.destination:
+        print(f"대상: {result.destination}")
+    if result.move_id is not None:
+        print(f"이동 기록 ID: {result.move_id}")
+    return 0 if result.success else 3
+
+
+def run_history(storage: Storage, limit: int) -> int:
+    records = storage.list_moves(max(1, limit))
+    if not records:
+        print("이동 기록이 없습니다.")
+        return 0
+    for record in records:
+        state = "되돌림" if record.undone_at else "이동됨"
+        print(f"[{record.id}] {state} {record.destination_path}")
+        print(f"  원래 위치: {record.source_path}")
+    return 0
+
+
 def main() -> int:
     args = build_parser().parse_args()
     storage = Storage(args.db)
@@ -118,6 +154,16 @@ def main() -> int:
         return run_list_rules(storage)
     if args.command == "classify":
         return run_classify(args.file, storage)
+    if args.command == "move":
+        return _print_move_result(
+            move_classified_file(args.file, storage, execute=args.execute)
+        )
+    if args.command == "history":
+        return run_history(storage, args.limit)
+    if args.command == "undo":
+        return _print_move_result(
+            undo_move(args.move_id, storage, execute=args.execute)
+        )
     return 2
 
 
