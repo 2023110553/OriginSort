@@ -22,6 +22,22 @@ $env:PYTHONPATH = (Resolve-Path src)
 pytest
 ```
 
+GUI 개발 실행:
+
+```powershell
+pip install "PySide6>=6.8"
+py -m originsort.ui.app
+```
+
+Windows 실행 파일 빌드:
+
+```powershell
+pip install "PyInstaller>=6.0"
+.\scripts\build.cmd
+```
+
+완성된 파일은 `dist\OriginSort.exe`에 생성됩니다.
+
 ## 폴더 분석
 
 ```powershell
