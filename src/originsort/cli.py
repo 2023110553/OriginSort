@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .classifier import classify_file
 from .mover import move_classified_file, undo_move
+from .monitor import DownloadMonitor
 from .scanner import RuleCandidate, scan_folder
 from .storage import Storage
 
@@ -43,6 +44,13 @@ def build_parser() -> argparse.ArgumentParser:
     undo.add_argument("move_id", type=int)
     undo.add_argument("--execute", action="store_true",
                       help="미리보기 대신 실제로 되돌립니다")
+
+    watch = commands.add_parser("watch", help="새 다운로드를 감시합니다")
+    watch.add_argument("folder", type=Path)
+    watch.add_argument("--execute", action="store_true",
+                       help="판별된 파일을 실제로 이동합니다")
+    watch.add_argument("--interval", type=float, default=1.0,
+                       help="폴더 확인 주기(초)")
     return parser
 
 
@@ -164,6 +172,20 @@ def main() -> int:
         return _print_move_result(
             undo_move(args.move_id, storage, execute=args.execute)
         )
+    if args.command == "watch":
+        folder = _resolve_directory(args.folder)
+        if folder is None:
+            print(f"폴더를 찾을 수 없습니다: {args.folder.expanduser().resolve()}")
+            return 2
+        mode = "자동 이동" if args.execute else "미리보기"
+        print(f"감시 시작: {folder} ({mode})")
+        monitor = DownloadMonitor(folder, storage, execute=args.execute,
+                                  on_result=_print_move_result)
+        try:
+            monitor.run(max(0.2, args.interval))
+        except KeyboardInterrupt:
+            print("감시를 종료했습니다.")
+        return 0
     return 2
 
 

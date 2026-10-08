@@ -58,5 +58,16 @@ py -m originsort.cli undo 1
 py -m originsort.cli undo 1 --execute
 ```
 
+## 다운로드 감시
+
+감시는 시작 시 이미 존재하던 파일을 건너뛰고 이후 추가되어 크기가 안정된 파일만 처리합니다. Chrome의 `.crdownload` 같은 임시 파일은 무시합니다.
+
+```powershell
+py -m originsort.cli watch "C:\Users\사용자\Downloads"
+py -m originsort.cli watch "C:\Users\사용자\Downloads" --execute
+```
+
+첫 번째 명령은 분류 결과만 출력합니다. 두 번째 명령만 실제 파일을 이동합니다. `Ctrl+C`로 종료할 수 있습니다.
+
 이동 기록에는 원래 경로와 SHA-256 해시가 저장됩니다. 이동된 파일이 수정됐거나 원래 위치에 같은 이름의 파일이 생기면 되돌리기를 실행하지 않습니다.
 
