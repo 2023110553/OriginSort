@@ -32,3 +32,17 @@ py -m originsort.cli scan "C:\Users\사용자\Desktop\전공"
 
 결과에는 출처 키, 발견된 파일 수, 목적지 후보와 상태가 표시됩니다. 하나의 출처가 여러 폴더에서 발견되면 `충돌`로 표시하며 자동으로 목적지를 결정하지 않습니다.
 
+## 규칙 저장과 파일 판별
+
+폴더 분석은 기본적으로 미리보기입니다. 충돌 없는 후보를 저장하려면 `--save`를 명시합니다.
+
+```powershell
+py -m originsort.cli rules discover "C:\Users\사용자\Desktop\대학" --save
+py -m originsort.cli rules list
+py -m originsort.cli classify "C:\Users\사용자\Downloads\lecture.pdf"
+```
+
+규칙은 `%LOCALAPPDATA%\OriginSort\originsort.db`에 저장됩니다. `classify`는 파일을 이동하지 않고 예상 목적지만 출력합니다.
+
+전체 개발 순서는 [개발 계획](docs/ROADMAP.md)에서 관리합니다.
+

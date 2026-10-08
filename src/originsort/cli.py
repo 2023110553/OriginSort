@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .scanner import scan_folder
+from .classifier import classify_file
+from .scanner import RuleCandidate, scan_folder
+from .storage import Storage
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -11,22 +13,33 @@ def build_parser() -> argparse.ArgumentParser:
         prog="originsort",
         description="동국대학교 eClass 다운로드 출처 분석기",
     )
+    parser.add_argument("--db", type=Path, help="SQLite 데이터베이스 경로")
     commands = parser.add_subparsers(dest="command", required=True)
     scan = commands.add_parser("scan", help="기존 정리 폴더를 분석합니다")
     scan.add_argument("folder", type=Path, help="분석할 폴더")
+
+    rules = commands.add_parser("rules", help="분류 규칙을 관리합니다")
+    rule_commands = rules.add_subparsers(dest="rules_command", required=True)
+    discover = rule_commands.add_parser("discover", help="기존 폴더에서 규칙 후보를 찾습니다")
+    discover.add_argument("folder", type=Path)
+    discover.add_argument("--save", action="store_true",
+                          help="충돌 없는 후보를 데이터베이스에 저장합니다")
+    rule_commands.add_parser("list", help="저장된 규칙을 표시합니다")
+
+    classify = commands.add_parser("classify",
+                                   help="파일을 이동하지 않고 예상 목적지를 표시합니다")
+    classify.add_argument("file", type=Path)
     return parser
 
 
-def run_scan(folder: Path) -> int:
-    folder = folder.expanduser().resolve()
-    if not folder.is_dir():
-        print(f"폴더를 찾을 수 없습니다: {folder}")
-        return 2
+def _resolve_directory(folder: Path) -> Path | None:
+    resolved = folder.expanduser().resolve()
+    return resolved if resolved.is_dir() else None
 
-    candidates, inspected = scan_folder(folder)
+
+def _print_candidates(candidates: list[RuleCandidate], inspected: int) -> None:
     print(f"분석한 파일: {inspected}개")
     print(f"발견한 출처: {len(candidates)}개")
-
     for candidate in candidates:
         print(f"\n[{candidate.status}] {candidate.source_key}")
         print(f"근거 파일: {candidate.evidence_count}개")
@@ -34,16 +47,79 @@ def run_scan(folder: Path) -> int:
             candidate.destinations.items(), key=lambda item: str(item[0])
         ):
             print(f"  {destination} ({count}개)")
+
+
+def run_scan(folder: Path) -> int:
+    resolved = _resolve_directory(folder)
+    if resolved is None:
+        print(f"폴더를 찾을 수 없습니다: {folder.expanduser().resolve()}")
+        return 2
+    candidates, inspected = scan_folder(resolved)
+    _print_candidates(candidates, inspected)
     return 0
+
+
+def run_discover(folder: Path, storage: Storage, save: bool) -> int:
+    resolved = _resolve_directory(folder)
+    if resolved is None:
+        print(f"폴더를 찾을 수 없습니다: {folder.expanduser().resolve()}")
+        return 2
+    candidates, inspected = scan_folder(resolved)
+    _print_candidates(candidates, inspected)
+    if not save:
+        print("\n미리보기만 수행했습니다. 저장하려면 --save를 추가하세요.")
+        return 0
+    saved = 0
+    for candidate in candidates:
+        if len(candidate.destinations) != 1:
+            continue
+        destination = next(iter(candidate.destinations))
+        storage.save_rule(candidate.source_key, destination,
+                          evidence_count=candidate.evidence_count,
+                          creation_method="folder_scan")
+        saved += 1
+    print(f"\n충돌 없는 규칙 {saved}개를 저장했습니다.")
+    return 0
+
+
+def run_list_rules(storage: Storage) -> int:
+    rules = storage.list_rules()
+    if not rules:
+        print("저장된 규칙이 없습니다.")
+        return 0
+    for rule in rules:
+        state = "사용" if rule.enabled else "중지"
+        print(f"[{state}] {rule.source_key}")
+        print(f"  → {rule.destination} (근거 {rule.evidence_count}개)")
+    return 0
+
+
+def run_classify(path: Path, storage: Storage) -> int:
+    classification = classify_file(path, storage)
+    print(f"파일: {classification.file_path}")
+    if classification.source_key:
+        print(f"출처: {classification.source_key}")
+    print(f"결과: {classification.reason}")
+    if classification.destination:
+        print(f"예상 목적지: {classification.destination}")
+        return 0
+    return 3
 
 
 def main() -> int:
     args = build_parser().parse_args()
+    storage = Storage(args.db)
+    storage.initialize()
     if args.command == "scan":
         return run_scan(args.folder)
+    if args.command == "rules" and args.rules_command == "discover":
+        return run_discover(args.folder, storage, args.save)
+    if args.command == "rules" and args.rules_command == "list":
+        return run_list_rules(storage)
+    if args.command == "classify":
+        return run_classify(args.file, storage)
     return 2
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
