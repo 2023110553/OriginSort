@@ -42,6 +42,13 @@ py -m originsort.cli rules list
 py -m originsort.cli classify "C:\Users\사용자\Downloads\lecture.pdf"
 ```
 
+URL이나 이미 받은 파일 하나로도 규칙을 등록할 수 있습니다.
+
+```powershell
+py -m originsort.cli rules add-url "https://eclass.dongguk.edu/mod/ubboard/article.php?id=150765" "C:\과목\시소프"
+py -m originsort.cli rules add-file "C:\Downloads\lecture.pdf" "C:\과목\시소프"
+```
+
 규칙은 `%LOCALAPPDATA%\OriginSort\originsort.db`에 저장됩니다. `classify`는 파일을 이동하지 않고 예상 목적지만 출력합니다.
 
 전체 개발 순서는 [개발 계획](docs/ROADMAP.md)에서 관리합니다.

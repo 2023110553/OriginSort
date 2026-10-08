@@ -14,9 +14,11 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+gui = ["PySide6>=6.8"]
 
 [project.scripts]
 originsort = "originsort.cli:main"
+originsort-gui = "originsort.ui.app:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/originsort"]

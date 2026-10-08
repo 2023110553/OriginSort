@@ -31,6 +31,9 @@ class MoveRecord:
 
 
 def default_database_path() -> Path:
+    override = os.environ.get("ORIGINSORT_DATA_DIR")
+    if override:
+        return Path(override) / "originsort.db"
     base = os.environ.get("LOCALAPPDATA")
     if base:
         return Path(base) / "OriginSort" / "originsort.db"
@@ -78,6 +81,11 @@ class Storage:
                     size INTEGER NOT NULL,
                     moved_at TEXT NOT NULL,
                     undone_at TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
                 );
                 """
             )
@@ -130,6 +138,21 @@ class Storage:
             ).fetchall()
         return [self._to_rule(row) for row in rows]
 
+    def set_rule_enabled(self, source_key: str, enabled: bool) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "UPDATE rules SET enabled = ?, updated_at = ? WHERE source_key = ?",
+                (1 if enabled else 0, datetime.now(UTC).isoformat(), source_key),
+            )
+            return cursor.rowcount > 0
+
+    def delete_rule(self, source_key: str) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM rules WHERE source_key = ?", (source_key,)
+            )
+            return cursor.rowcount > 0
+
     def record_move(self, source_path: Path, destination_path: Path,
                     source_key: str, sha256: str, size: int) -> int:
         moved_at = datetime.now(UTC).isoformat()
@@ -169,6 +192,21 @@ class Storage:
             connection.execute(
                 "UPDATE moves SET undone_at = ? WHERE id = ?",
                 (datetime.now(UTC).isoformat(), move_id),
+            )
+
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT value FROM app_settings WHERE key = ?", (key,)
+            ).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """INSERT INTO app_settings (key, value) VALUES (?, ?)
+                   ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+                (key, value),
             )
 
     @staticmethod

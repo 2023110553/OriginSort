@@ -6,6 +6,8 @@ from pathlib import Path
 from .classifier import classify_file
 from .mover import move_classified_file, undo_move
 from .monitor import DownloadMonitor
+from .parsers import parse_eclass_source
+from .scanner import inspect_file
 from .scanner import RuleCandidate, scan_folder
 from .storage import Storage
 
@@ -27,6 +29,15 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--save", action="store_true",
                           help="충돌 없는 후보를 데이터베이스에 저장합니다")
     rule_commands.add_parser("list", help="저장된 규칙을 표시합니다")
+    add_url = rule_commands.add_parser("add-url", help="eClass URL로 규칙을 추가합니다")
+    add_url.add_argument("url")
+    add_url.add_argument("destination", type=Path)
+    add_file = rule_commands.add_parser("add-file", help="기존 파일의 출처로 규칙을 추가합니다")
+    add_file.add_argument("file", type=Path)
+    add_file.add_argument("destination", type=Path)
+    for action in ("enable", "disable", "delete"):
+        command = rule_commands.add_parser(action, help=f"규칙을 {action} 처리합니다")
+        command.add_argument("source_key")
 
     classify = commands.add_parser("classify",
                                    help="파일을 이동하지 않고 예상 목적지를 표시합니다")
@@ -116,6 +127,42 @@ def run_list_rules(storage: Storage) -> int:
     return 0
 
 
+def _valid_destination(path: Path) -> Path | None:
+    resolved = path.expanduser().resolve()
+    return resolved if resolved.is_dir() else None
+
+
+def run_add_url(url: str, destination: Path, storage: Storage) -> int:
+    source = parse_eclass_source(url)
+    target = _valid_destination(destination)
+    if source is None:
+        print("지원되는 eClass 자료실 URL이 아닙니다.")
+        return 2
+    if target is None:
+        print(f"대상 폴더를 찾을 수 없습니다: {destination.expanduser().resolve()}")
+        return 2
+    storage.save_rule(source.key, target, evidence_count=0,
+                      creation_method="url_input")
+    print(f"규칙 저장: {source.key} → {target}")
+    return 0
+
+
+def run_add_file(file_path: Path, destination: Path, storage: Storage) -> int:
+    resolved = file_path.expanduser().resolve()
+    target = _valid_destination(destination)
+    evidence = inspect_file(resolved) if resolved.is_file() else None
+    if evidence is None:
+        print("파일에서 지원되는 eClass 출처를 찾지 못했습니다.")
+        return 2
+    if target is None:
+        print(f"대상 폴더를 찾을 수 없습니다: {destination.expanduser().resolve()}")
+        return 2
+    storage.save_rule(evidence.source.key, target, evidence_count=1,
+                      creation_method="sample_file")
+    print(f"규칙 저장: {evidence.source.key} → {target}")
+    return 0
+
+
 def run_classify(path: Path, storage: Storage) -> int:
     classification = classify_file(path, storage)
     print(f"파일: {classification.file_path}")
@@ -160,6 +207,23 @@ def main() -> int:
         return run_discover(args.folder, storage, args.save)
     if args.command == "rules" and args.rules_command == "list":
         return run_list_rules(storage)
+    if args.command == "rules" and args.rules_command == "add-url":
+        return run_add_url(args.url, args.destination, storage)
+    if args.command == "rules" and args.rules_command == "add-file":
+        return run_add_file(args.file, args.destination, storage)
+    if args.command == "rules" and args.rules_command in {"enable", "disable"}:
+        enabled = args.rules_command == "enable"
+        if not storage.set_rule_enabled(args.source_key, enabled):
+            print("규칙을 찾을 수 없습니다.")
+            return 2
+        print("규칙 상태를 변경했습니다.")
+        return 0
+    if args.command == "rules" and args.rules_command == "delete":
+        if not storage.delete_rule(args.source_key):
+            print("규칙을 찾을 수 없습니다.")
+            return 2
+        print("규칙을 삭제했습니다.")
+        return 0
     if args.command == "classify":
         return run_classify(args.file, storage)
     if args.command == "move":
